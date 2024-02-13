@@ -1,6 +1,6 @@
 ---
 title: "Simulation1"
-author: "sven panis"
+author: "Sven Panis"
 date: "2024-02-13"
 output: html_document
 ---
@@ -9,23 +9,75 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r initialize}
-library(ggplot2)
-theme_set(theme_minimal)
+```{r initialize, include=F}
+library(tidyverse)
+theme_set(theme_minimal())
 set.seed(4567)
 ```
 
 # Background
 
-In psychological experiments, the analysis of response time (RT) and accuracy data is typically done using ANOVA on the means of each subject-condition combination. This approach has a number of disadvantages (Panis, Schmidt, Wolkersdorfer, & Panis, 2020). For example, when the mean RT is different between two experimental conditions, one still does not know whether the onset time of the fastest responses is different or not between the two conditions, nor when the experimental effect exactly emerges in time. Such knowledge is often useful to constrain theoretical interpretations of the underlying cognitive processes. Panis et al. (2020) proposed to use Event History Analysis - a.k.a. survival, hazard, duration, transition, failure-time analysis -, the standard set of techniques to analyse time-to-event data. In particular, they proposed to use *discrete-time* EHA, because the number of trials per subject-condition combination is typically not that large.
+In psychological experiments, the analysis of response time (RT) and accuracy data is typically done using ANOVA on the means of each subject-condition combination. This approach has a number of disadvantages ([Panis, Schmidt, Wolkersdorfer, & Panis, 2020](https://journals.sagepub.com/doi/full/10.1177/2041669520978673)). For example, when the mean RT is different between two experimental conditions, one still does not know whether the onset time of the fastest responses is different or not between the two conditions, nor when the experimental effect exactly emerges in time, how long it lasts, and when it peaks. Such knowledge is often useful to constrain theoretical interpretations of the underlying cognitive processes ([Panis & Schmidt, 2022](https://www.degruyter.com/document/doi/10.1515/psych-2022-0005/html)). Panis et al. (2020) propose to use Event History Analysis - a.k.a. survival, hazard, duration, transition, failure-time analysis -, the standard set of techniques to analyse time-to-event data ([Singer & Willett, 2003](https://psycnet.apa.org/record/2003-00630-000)). In particular, they propose to use *discrete-time* EHA, because the number of trials per subject-condition combination is typically not that large. The stretch of time in each trial between time point 0 (typically target onset) and the follow-up time (e.g., the response deadline) is divided in contiguous bins (startpoint excluded; endpoint included), and the shape of the empirical RT distribution is described by plotting the diagnostic discrete-time hazard function h(t) = Prob(T = t | T $\ge$ t) - the conditional probability that the event-of-interest occurs in bin t given that is does not occur before bin t -, which is easily estimated for empirical data by setting up a life table.
 
-# Goal
+# Simulation goal
 
-Our goal here is to simulate data from a small-N design, to estimate the power to detect a certain hazard-ration in a certain time bin, as a function of the number of trials (K) per subject-condition combination, and the number of subjects (N). For simplicity, we start with a within-subjects design with two conditions.
+Our goal here is to simulate data from a small-N design, to estimate the power to detect a certain effect size (hazard-ratio) in a certain time bin, as a function of the number of trials (K) per subject-condition combination, and the number of subjects (N). 
+For simplicity, we start with a within-subjects design with two conditions. Assume that the hazard function in condition 1 starts to rise around 200 ms after target onset, reaches a peak of about .5 around 600 ms after target onset, and then levels off to a constant non-zero value of about .40 (this shape is often observed in empirical data).
+
+### Step 1. Set up and plot a discrete-time hazard function.
+
+```{r step1}
+followup <- 1000 # length of data collection period in ms for each trial
+nr_bins  <- 20
+bin_width <- followup/nr_bins
+bin_endpoints <- (1:nr_bins)*bin_width
+
+hazard_cond1 <- c(0, 0, 0, 0, 0.03, 0.08, 0.11, 0.19, 0.31, 0.42, 0.50, 0.52, 0.47, 0.43, 0.40, 0.41, 0.39, 0.41, 0.40, 0.39)
+
+data_h <- tibble(hazard = hazard_cond1, time = bin_endpoints)
+p1 <-ggplot(data_h, aes(x = time, y = hazard)) +
+  geom_line() + geom_point() +
+  scale_x_continuous(breaks = bin_endpoints) +
+  scale_y_continuous(limits = c(0,1)) +
+  xlab("endpoints of discrete time bins") +
+  ylab("discrete-time hazard probability")
+p1
+```
+
+### Step 2. Create a function to simulate one trial from this user-specified discrete-time hazard function.
+
+```{r step2}
+sim_haz <- function(hazF){
+  n = length(hazF)
+  bin_counter = 0
+  event_occured = F
+  data <- c()
+  while(bin_counter < n & event_occured == F){
+   bin_counter <- bin_counter + 1  
+   flip <- runif(1,0,1) # draw a random number from [0,1] 
+   if(flip > hazF[bin_counter]){
+     data[bin_counter] <- 0
+   } else {
+     data[bin_counter] <- 1
+     event_occured <- T
+   }
+  }
+  return(data) 
+}
+```
+
+```{r testFunction1}
+test <- sim_haz(hazard_cond1)
+test
+```
+
+### Step 3. Create a function to simulate K trials for N subjects, and plot the power estimates to detect a user-defined hazard ratio in bin t, using a generalized linear mixed effects regression model.
 
 
 
 
 
+
+### Step 4. Repeat step 3, but for a Bayesian glmer model. 
 
 
