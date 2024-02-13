@@ -1,0 +1,31 @@
+---
+title: "Simulation1"
+author: "sven panis"
+date: "2024-02-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r initialize}
+library(ggplot2)
+theme_set(theme_minimal)
+set.seed(4567)
+```
+
+# Background
+
+In psychological experiments, the analysis of response time (RT) and accuracy data is typically done using ANOVA on the means of each subject-condition combination. This approach has a number of disadvantages (Panis, Schmidt, Wolkersdorfer, & Panis, 2020). For example, when the mean RT is different between two experimental conditions, one still does not know whether the onset time of the fastest responses is different or not between the two conditions, nor when the experimental effect exactly emerges in time. Such knowledge is often useful to constrain theoretical interpretations of the underlying cognitive processes. Panis et al. (2020) proposed to use Event History Analysis - a.k.a. survival, hazard, duration, transition, failure-time analysis -, the standard set of techniques to analyse time-to-event data. In particular, they proposed to use *discrete-time* EHA, because the number of trials per subject-condition combination is typically not that large.
+
+# Goal
+
+Our goal here is to simulate data from a small-N design, to estimate the power to detect a certain hazard-ration in a certain time bin, as a function of the number of trials (K) per subject-condition combination, and the number of subjects (N). For simplicity, we start with a within-subjects design with two conditions.
+
+
+
+
+
+
+
