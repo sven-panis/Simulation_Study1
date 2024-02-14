@@ -78,11 +78,32 @@ for(i in c(1:2)){test <- sim_haz(hazard_cond1);print(test)}
 ```{r plot2haz}
 # d sets effect size (hazard ratio) for each bin:
 
-d <- c(1,1,1,1,1,1,1,1,1,  1.2,    1.7,    1.3,  1.1,  1,  1,1,1,1,1,1)
+d <- c(1,1,1,1,1,1,1,1,1,  1.1,    1.2,    1.1,  1.1,  1,  1,1,1,1,1,1)
+
+#d <- c(1,1,1,1,   1.02,1.04,1.06,1.08,1.10,1.12,      1.14,    1.16,  1.18,  1.20,  1.22,1.24,1.26,1.28,1.30,1.32)
+        
 hazard_cond2 <- hazard_cond1*d
 
+
+# add some jitter to the hazard functions, and set negative values to 0 
+      
+          hazard_cond1_J <- c()
+          hazard_cond2_J <- c()
+           
+          for(i in 1:length(hazard_cond1)){
+            hazard_cond1_J[i] <- hazard_cond1[i] + rnorm(1,0,.01)
+            hazard_cond2_J[i] <- hazard_cond2[i] + rnorm(1,0,.01)
+            if(hazard_cond1_J[i] < 0){
+               hazard_cond1_J[i] <- 0
+            }
+            if(hazard_cond2_J[i] < 0){
+               hazard_cond2_J[i] <- 0
+            }
+          }
+
+
 # plot both hazard functions
-data_h2 <- tibble(hazard1 = hazard_cond1, hazard2 = hazard_cond2, time = bin_endpoints)
+data_h2 <- tibble(hazard1 = hazard_cond1_J, hazard2 = hazard_cond2_J, time = bin_endpoints)
 p2 <-ggplot(data_h2, aes(x = time)) +
   geom_line(aes(y = hazard1, color = "black")) + 
   geom_point(aes(y = hazard1, color = "black")) +
@@ -108,12 +129,28 @@ sim_power <- function(hazF1,d,ntrials,nsub){
     hazF2 <- hazF1*d  
     data <- data.frame()
     for(subj in 1:nsub){
+
+      # add some jitter to the hazard functions for each subject, and set negative values to 0 
+      
+          hazF1_J <- c()
+          hazF2_J <- c()
+           
+          for(i in 1:length(hazF1)){
+            hazF1_J[i] <- hazF1[i] + rnorm(1,0,.01)
+            hazF2_J[i] <- hazF2[i] + rnorm(1,0,.01)
+            if(hazF1_J[i] < 0){
+               hazF1_J[i] <- 0
+            }
+            if(hazF2_J[i] < 0){
+               hazF2_J[i] <- 0
+            }
+          }
       for(cond in 1:2){
         for(tr in 1:ntrials){
           if(cond==1){
-                data_temp <- data.frame(subject = subj, condition = cond, trial = tr, sim_haz(hazF1)) # simulate ntrials for condition 1
+                data_temp <- data.frame(subject = subj, condition = cond, trial = tr, sim_haz(hazF1_J)) # simulate ntrials for condition 1
           } else {
-                data_temp <- data.frame(subject = subj, condition = cond, trial = tr, sim_haz(hazF2)) # simulate ntrials for condition 2
+                data_temp <- data.frame(subject = subj, condition = cond, trial = tr, sim_haz(hazF2_J)) # simulate ntrials for condition 2
           }
           data <- rbind(data, data_temp)
         }
@@ -130,16 +167,13 @@ sim_power <- function(hazF1,d,ntrials,nsub){
     data$time3 <- data$time1^3
 
     # center trial variable
-    data$trialC <- data$trial-(ntrials-10)
+    data$trialC <- data$trial-10 #(ntrials-10)
 
     # change range of trialC to solve convergence problems...
     data$trialC2 <- data$trialC/100
 
     # recode condition into dichotomous variables
     data$cond  <- ifelse(data$condition==2,1,0)
-    
-     #  names(data) <- c("subject","condition","trial","outcome","time1","time2","time3","trialC","trialC2","cond")
-  
     
     # convert some colums into factors
     data$subject  <- factor(data$subject)
@@ -150,25 +184,65 @@ sim_power <- function(hazF1,d,ntrials,nsub){
     fit1<-glmer(outcome ~ 1+time1+time2+time3+
 
               # main effects & interactions with time
-              trialC2 + trialC2:time1 + trialC2:time2 + trialC2:time3 +
+              trialC2 + trialC2:time1 + trialC2:time2 + 
               cond    + cond:time1    + cond:time2    + cond:time3 +
 
               # random effects, control parameters, data set, and complementary log-log link function
               (1+time1|subject),  data=data, family=binomial(link="cloglog"))
 
+    # print(summary(fit1))
+    
+    
+    
     # return the pvalue for effect cond1
     return(coef(summary(fit1))[6,4])
 }
 ```
 
 ```{r testsim}
-test2 <- sim_power(hazard_cond1,d,50,6)
+test2 <- sim_power(hazard_cond1,d,10,2)
 test2
 ```
 
-### Step 4. Plot the power estimates for K-N combinations to detect a user-defined hazard ratio in bin t, using a generalized linear mixed effects regression model.
+### Step 5. Plot the power estimates for K-N combinations to detect a user-defined hazard ratio in bin 11, using a generalized linear mixed effects regression model.
+
+```{r power, eval=F}
+# vectors for number of subjects and trials
+n_subs_vector   <- c(4, 6, 8)
+n_trials_vector <- c(50, 75, 100)
+
+# a loop to run all simulations
+power <- c()
+subjects <- c()
+trials <- c()
+i <- 0 # use this as a counter for indexing
+
+for(s in n_subs_vector){
+  for(t in n_trials_vector){
+    i <- i+1
+    sims <- replicate(4,sim_power(hazard_cond1,d,t,s))
+    power[i] <- length(sims[sims<.05])/length(sims)
+    subjects[i] <- s
+    trials[i] <- t
+    print(i)
+  }
+}
+
+# combine into dataframe
+plot_df <- data.frame(power,subjects,trials)
+
+# plot the power curve
+ggplot(plot_df, aes(x=subjects,
+                    y=power,
+                    group=trials,
+                    color=trials))+
+  geom_point()+
+  geom_line()+
+  scale_y_continuous(limits=c(0,1))+
+  scale_x_continuous(breaks=n_subs_vector)
 
 
+```
 
 
 ### Step 5. Repeat step 4, but for a Bayesian glmer model. 
