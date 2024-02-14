@@ -11,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r initialize, include=F}
 library(tidyverse)
+library(lme4)
+library(nlme)
 theme_set(theme_minimal())
 set.seed(4567)
 ```
@@ -71,12 +73,12 @@ sim_haz <- function(hazF){
 for(i in c(1:2)){test <- sim_haz(hazard_cond1);print(test)}
 ```
 
-### Step 3. Create a function to run a simulated generalized linear mixed effects regression model, on a person-trial-period data file for K trials per condition, and N subjects
+### Step 3. Introduce an assumed effect size (hazard ratio) for each time bin. 
 
 ```{r plot2haz}
 # d sets effect size (hazard ratio) for each bin:
 
-d <- c(1,1,1,1,1,1,1,1,1,  1.1,  1.2,  1.1,  1.1,  1,  1,1,1,1,1,1)
+d <- c(1,1,1,1,1,1,1,1,1,  1.2,    1.7,    1.3,  1.1,  1,  1,1,1,1,1,1)
 hazard_cond2 <- hazard_cond1*d
 
 # plot both hazard functions
@@ -97,6 +99,8 @@ p2 <-ggplot(data_h2, aes(x = time)) +
 p2
 ```
 
+### Step 4. Create a function to run a simulated generalized linear mixed effects regression model, on a person-trial-period data file with K trials per condition, and N subjects
+
 ```{r sim}
 # ntrials to change number of trials
 #    nsub to change number of subjects
@@ -115,20 +119,50 @@ sim_power <- function(hazF1,d,ntrials,nsub){
         }
       }
     }
-    return(data)
-    # fit glmer model
     
-    
-    # return a test-statistic for a certain bin
-    
-      #return the pvalue
-    #  return(aov_results[[1]]$`Pr(>F)`[1])
+ 
+    # delete first 4 time bins without observed events
+    data <- subset(data, data$time>4)  
+ 
+    # include centered version of time and powers of 2 , 3 , ....
+    data$time1 <- data$time-11  
+    data$time2 <- data$time1^2
+    data$time3 <- data$time1^3
 
+    # center trial variable
+    data$trialC <- data$trial-(ntrials-10)
+
+    # change range of trialC to solve convergence problems...
+    data$trialC2 <- data$trialC/100
+
+    # recode condition into dichotomous variables
+    data$cond  <- ifelse(data$condition==2,1,0)
+    
+     #  names(data) <- c("subject","condition","trial","outcome","time1","time2","time3","trialC","trialC2","cond")
+  
+    
+    # convert some colums into factors
+    data$subject  <- factor(data$subject)
+    data$cond     <- factor(data$cond)
+    data$outcome  <- factor(data$outcome)
+
+    # fit glmer model
+    fit1<-glmer(outcome ~ 1+time1+time2+time3+
+
+              # main effects & interactions with time
+              trialC2 + trialC2:time1 + trialC2:time2 + trialC2:time3 +
+              cond    + cond:time1    + cond:time2    + cond:time3 +
+
+              # random effects, control parameters, data set, and complementary log-log link function
+              (1+time1|subject),  data=data, family=binomial(link="cloglog"))
+
+    # return the pvalue for effect cond1
+    return(coef(summary(fit1))[6,4])
 }
 ```
 
 ```{r testsim}
-test2 <- sim_power(hazard_cond1,d,3,2)
+test2 <- sim_power(hazard_cond1,d,50,6)
 test2
 ```
 
