@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lme4)
 library(nlme)
+#library(bookdown) # for automatic Figure numbering
 theme_set(theme_minimal())
 set.seed(4567)
 ```
@@ -28,7 +29,7 @@ For simplicity, we start with a within-subjects design with two conditions. Assu
 
 ### Step 1. Set up and plot a user-defined discrete-time hazard function.
 
-```{r step1}
+```{r step1, fig.cap = "Figure 1. A user-defined discrete-time hazard function."}
 followup <- 1000 # length of data collection period in ms for each trial
 nr_bins  <- 20
 bin_width <- followup/nr_bins
@@ -37,13 +38,13 @@ bin_endpoints <- (1:nr_bins)*bin_width
 hazard_cond1 <- c(0, 0, 0, 0, 0.03, 0.08, 0.11, 0.19, 0.31, 0.42, 0.50, 0.52, 0.47, 0.43, 0.40, 0.41, 0.39, 0.41, 0.40, 0.39)
 
 data_h <- tibble(hazard = hazard_cond1, time = bin_endpoints)
-p1 <-ggplot(data_h, aes(x = time, y = hazard)) +
+ggplot(data_h, aes(x = time, y = hazard)) +
   geom_line() + geom_point() +
   scale_x_continuous(breaks = bin_endpoints) +
   scale_y_continuous(limits = c(0,1)) +
-  xlab("endpoints of discrete time bins") +
+  xlab("endpoints of discrete time bins (ms)") +
   ylab("discrete-time hazard probability")
-p1
+
 ```
 
 ### Step 2. Create a function to simulate discrete time-to-event data for one trial from this user-specified discrete-time hazard function.
@@ -68,6 +69,8 @@ sim_haz <- function(hazF){
 }
 ```
 
+Let's test this function for two trials.
+
 ```{r testFunction1}
 # simulate data from 2 trials
 for(i in c(1:2)){test <- sim_haz(hazard_cond1);print(test)}
@@ -75,21 +78,14 @@ for(i in c(1:2)){test <- sim_haz(hazard_cond1);print(test)}
 
 ### Step 3. Introduce an assumed effect size (hazard ratio) for each time bin. 
 
-```{r plot2haz}
+```{r plot2haz, fig.cap = "Figure 2. A user-defined effect of an experimental manipulation on the shape of the hazard function (between 450 and 650 ms after target onset), with some jitter added."}
 # d sets effect size (hazard ratio) for each bin:
-
 d <- c(1,1,1,1,1,1,1,1,1,  1.1,    1.2,    1.1,  1.1,  1,  1,1,1,1,1,1)
-
-#d <- c(1,1,1,1,   1.02,1.04,1.06,1.08,1.10,1.12,      1.14,    1.16,  1.18,  1.20,  1.22,1.24,1.26,1.28,1.30,1.32)
-        
 hazard_cond2 <- hazard_cond1*d
 
-
 # add some jitter to the hazard functions, and set negative values to 0 
-      
           hazard_cond1_J <- c()
           hazard_cond2_J <- c()
-           
           for(i in 1:length(hazard_cond1)){
             hazard_cond1_J[i] <- hazard_cond1[i] + rnorm(1,0,.01)
             hazard_cond2_J[i] <- hazard_cond2[i] + rnorm(1,0,.01)
@@ -100,7 +96,6 @@ hazard_cond2 <- hazard_cond1*d
                hazard_cond2_J[i] <- 0
             }
           }
-
 
 # plot both hazard functions
 data_h2 <- tibble(hazard1 = hazard_cond1_J, hazard2 = hazard_cond2_J, time = bin_endpoints)
@@ -115,12 +110,12 @@ p2 <-ggplot(data_h2, aes(x = time)) +
                        guide = 'legend') +
   scale_x_continuous(breaks = bin_endpoints) +
   scale_y_continuous(limits = c(0,1)) +
-  xlab("endpoints of discrete time bins") +
+  xlab("endpoints of discrete time bins (ms)") +
   ylab("discrete-time hazard probability") 
 p2
 ```
 
-### Step 4. Create a function to run a simulated generalized linear mixed effects regression model, on a person-trial-period data file with K trials per condition, and N subjects
+### Step 4. Create a function to run a generalized linear mixed effects regression model on a simulated subject-trial-bin data file with K trials per condition, and N subjects.
 
 ```{r sim}
 # ntrials to change number of trials
@@ -131,10 +126,8 @@ sim_power <- function(hazF1,d,ntrials,nsub){
     for(subj in 1:nsub){
 
       # add some jitter to the hazard functions for each subject, and set negative values to 0 
-      
           hazF1_J <- c()
           hazF2_J <- c()
-           
           for(i in 1:length(hazF1)){
             hazF1_J[i] <- hazF1[i] + rnorm(1,0,.01)
             hazF2_J[i] <- hazF2[i] + rnorm(1,0,.01)
@@ -156,20 +149,22 @@ sim_power <- function(hazF1,d,ntrials,nsub){
         }
       }
     }
+    # preprocessing before fitting glmer
     
- 
-    # delete first 4 time bins without observed events
+    # delete first 4 time bins 
     data <- subset(data, data$time>4)  
  
-    # include centered version of time and powers of 2 , 3 , ....
+    # include centered version of linear time to select bin of interest (bin 11 with hazard ratio of 1.2)
     data$time1 <- data$time-11  
+    
+    # add nonlinear effects of time
     data$time2 <- data$time1^2
     data$time3 <- data$time1^3
 
-    # center trial variable
-    data$trialC <- data$trial-10 #(ntrials-10)
+    # center trial variable on trial 10
+    data$trialC <- data$trial-10 
 
-    # change range of trialC to solve convergence problems...
+    # change range of trialC to solve convergence problems
     data$trialC2 <- data$trialC/100
 
     # recode condition into dichotomous variables
@@ -181,7 +176,7 @@ sim_power <- function(hazF1,d,ntrials,nsub){
     data$outcome  <- factor(data$outcome)
 
     # fit glmer model
-    fit1<-glmer(outcome ~ 1+time1+time2+time3+
+    fit1<-glmer(outcome ~ 1+time1+time2+time3+ # baseline hazard function for condition 1
 
               # main effects & interactions with time
               trialC2 + trialC2:time1 + trialC2:time2 + 
@@ -192,24 +187,26 @@ sim_power <- function(hazF1,d,ntrials,nsub){
 
     # print(summary(fit1))
     
-    
-    
-    # return the pvalue for effect cond1
+    # return the pvalue for effect "cond1"
     return(coef(summary(fit1))[6,4])
 }
 ```
+
+Let's test the function.
 
 ```{r testsim}
 test2 <- sim_power(hazard_cond1,d,10,2)
 test2
 ```
 
-### Step 5. Plot the power estimates for K-N combinations to detect a user-defined hazard ratio in bin 11, using a generalized linear mixed effects regression model.
+The message "boundary (singular) fit: see help('isSingular')" refers to the fact that the estimated correlation between the random effects Intercept and TIME equals -1, because the simulated data from each subject is based on the same hazard function (despite some jitter on the hazard probabilities for each subject). Future simulations can introduce variation in the intercept and slope of the hazard functions across subjects.
+
+### Step 5. Estimate power by running 500 simulations for each of 16 K-N combinations, to detect a hazard ratio of 1.2 in bin 11, using a generalized linear mixed effects regression model.
 
 ```{r power, eval=F}
 # vectors for number of subjects and trials
-n_subs_vector   <- c(4, 6, 8)
-n_trials_vector <- c(50, 75, 100)
+n_subs_vector   <- c(4, 6, 8, 10)
+n_trials_vector <- c(50, 100, 150, 200)
 
 # a loop to run all simulations
 power <- c()
@@ -220,7 +217,7 @@ i <- 0 # use this as a counter for indexing
 for(s in n_subs_vector){
   for(t in n_trials_vector){
     i <- i+1
-    sims <- replicate(4,sim_power(hazard_cond1,d,t,s))
+    sims <- replicate(500,sim_power(hazard_cond1,d,t,s))
     power[i] <- length(sims[sims<.05])/length(sims)
     subjects[i] <- s
     trials[i] <- t
@@ -244,7 +241,12 @@ ggplot(plot_df, aes(x=subjects,
 
 ```
 
+As shown in Figure 3, we need at least 8 subjects and 200 trials per condition to detect a hazard ratio of 1.2 in bin (500,550] with a power of at least 80%.
 
-### Step 5. Repeat step 4, but for a Bayesian glmer model. 
+```{r fig3, echo=F, fig.cap="Figure 3. Simulated power for each combination of #subjects and #trials-per-condition. Each point is based on 500 simulations."}
+knitr::include_graphics("Power_glmer_HR1_2.png")
+```
 
+### Step 6. Repeat steps 4 and 5, but for a Bayesian glmer model. 
 
+Work in progress...
